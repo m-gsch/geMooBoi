@@ -27,7 +27,7 @@ func main() {
 
 func start() {
 	initValues()
-	f, err := os.Open("C:\\Users\\Svenson\\Documents\\bgb\\gb-test-roms-master\\cpu_instrs\\individual\\02-interrupts.gb")
+	f, err := os.Open("tetris.gb")
 
 	if err != nil {
 		panic(err)
