@@ -6,19 +6,6 @@ import (
 
 const (
 	clockSpeed = 4194304
-	initA      = 0x01
-	initFlagZ  = true
-	initFlagN  = false
-	initFlagH  = false
-	initFlagC  = true
-	initB      = 0x00
-	initC      = 0x13
-	initD      = 0x00
-	initE      = 0xD8
-	initH      = 0x01
-	initL      = 0x4D
-	initSP     = 0xFFFE
-	initPC     = 0x0100
 )
 
 type flags struct {
@@ -62,8 +49,6 @@ func bytesToUint16(b0, b1 byte) uint16 {
 func clockTicks(n int, c chan int) {
 	cyclesPassed += n
 
-	//t := (1000000 * n) / clockSpeed
-	//time.Sleep(time.Duration(t) * time.Nanosecond)
 	c <- 0
 }
 

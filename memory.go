@@ -36,8 +36,13 @@ const (
 )
 
 func readAddress(addr uint16) byte {
-
-	return memory[addr]
+	switch {
+	case addr == 0x100:
+		loadRom()
+		return memory[addr]
+	default:
+		return memory[addr]
+	}
 }
 
 func writeAddress(addr uint16, b byte) {

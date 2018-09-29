@@ -1,12 +1,13 @@
 package main
 
-//Execute $CF41 incorrect, 12 times correct 72993 instructions
-//13 times 254950 instructions incorrect(should not be called)
-//line 668082 second file == 0
-
-//LDH  A,(#FF44h) line 16970 LY==0x90 (144) screen printed!!!
 import (
 	"os"
+)
+
+//Define ROM
+const (
+	ROM     = "drmario.gb"
+	BOOTROM = "bootrom.bin"
 )
 
 var memory [0x10000]byte
@@ -18,7 +19,6 @@ var timerCounter = clockSpeed / frequency
 var dividerCounter int
 var interruptMaster bool
 var scanlineCounter = 456
-var screenData [160][144][4]byte
 
 func main() {
 
@@ -26,8 +26,25 @@ func main() {
 }
 
 func start() {
-	initValues()
-	f, err := os.Open("tetris.gb")
+	loadRom()
+	loadBootRom()
+	showWindow()
+
+}
+
+func loadBootRom() {
+	f, err := os.Open("roms" + string(os.PathSeparator) + BOOTROM)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+	f.Read(memory[:0x100])
+}
+
+func loadRom() {
+	f, err := os.Open("roms" + string(os.PathSeparator) + ROM)
 
 	if err != nil {
 		panic(err)
@@ -35,37 +52,6 @@ func start() {
 
 	defer f.Close()
 	f.Read(memory[:0x8000])
-
-	showWindow()
-	/* 	for {
-		//regs.flag.NZ = !regs.flag.Z //Shitty workaround
-		//regs.flag.NC = !regs.flag.C //Shitty workaround
-		////73895
-		////82647 af=0080/90C0
-		//instNumber++
-		//instructionDEBUG = readAddress(regs.PC)
-		//regs.PC++
-		//
-		//decodeIns(instructionDEBUG)
-		updateState()
-
-	} */
-}
-
-func initValues() {
-	regs.A = initA
-	regs.flag.Z = initFlagZ
-	regs.flag.N = initFlagN
-	regs.flag.H = initFlagH
-	regs.flag.C = initFlagC
-	regs.B = initB
-	regs.C = initC
-	regs.D = initD
-	regs.E = initE
-	regs.H = initH
-	regs.L = initL
-	regs.PC = initPC
-	regs.SP = initSP
 }
 
 func updateState() {
@@ -74,8 +60,10 @@ func updateState() {
 	for cyclesInUpdate < 69905 {
 		regs.flag.NZ = !regs.flag.Z //Shitty workaround
 		regs.flag.NC = !regs.flag.C //Shitty workaround
+
 		instructionDEBUG = readAddress(regs.PC)
 		regs.PC++
+
 		decodeIns(instructionDEBUG)
 		cyclesInUpdate += cyclesPassed
 
@@ -88,6 +76,7 @@ func updateState() {
 		cyclesPassed = 0 //Testing
 	}
 	//Render screen
+
 }
 
 func updateTimers() {
@@ -165,6 +154,7 @@ func drawScanline() {
 
 	if control>>1&0x1 == 0x1 {
 		//renderSprites
+		renderSprites()
 	}
 }
 
@@ -208,6 +198,7 @@ func renderTiles() {
 			tileID := int8(readAddress(tileAddr))
 			tileLocation = uint16(int16(tileData) + int16(tileID)*16)
 		}
+
 		line := yPos % 8
 		line *= 2
 
@@ -247,6 +238,69 @@ func renderTiles() {
 		pixels[(i*4)+2+(160*4*(int(ly-1)))] = blue
 		pixels[(i*4)+3+(160*4*(int(ly-1)))] = 0xff
 
+	}
+}
+
+func renderSprites() {
+
+	for i := 0; i < 40; i++ {
+		index := uint16(i * 4)
+		yPos := readAddress(0xFE00+index) - 16
+		xPos := readAddress(0xFE00+index+1) - 8
+		tileLocation := readAddress(0xFE00 + index + 2)
+		//attributes := readAddress(0xFE00 + index + 3)
+
+		ly := readAddress(LY)
+
+		ysize := 8
+		// does this sprite intercept with the scanline?
+		if ly >= yPos && ly < yPos+byte(ysize) {
+
+			line := ly - yPos
+
+			line *= 2
+			dataAddress := 0x8000 + uint16(tileLocation)*16 + uint16(line)
+			data1 := readAddress(dataAddress)
+			data2 := readAddress(dataAddress + 1)
+
+			// its easier to read in from right to left as pixel 0 is
+			// bit 7 in the colour data, pixel 1 is bit 6 etc...
+			for tilePixel := 7; tilePixel >= 0; tilePixel-- {
+				colorBit := tilePixel
+
+				// the rest is the same as for tiles
+				colorNum := data2 >> uint(colorBit) & 0x1
+				colorNum <<= 1
+				colorNum |= data1 >> uint(colorBit) & 0x1
+
+				col := getColor(colorNum)
+				var red byte
+				var green byte
+				var blue byte
+
+				switch col {
+				case 0: //white is transparent for sprites
+					continue
+				case 1:
+					red = 0xCC
+					green = 0xCC
+					blue = 0xCC
+				case 2:
+					red = 0x77
+					green = 0x77
+					blue = 0x77
+				}
+
+				xPix := 7 - tilePixel
+
+				pixel := int(xPos) + xPix
+
+				pixels[(pixel*4)+(160*4*(int(ly-1)))] = red
+				pixels[(pixel*4)+1+(160*4*(int(ly-1)))] = green
+				pixels[(pixel*4)+2+(160*4*(int(ly-1)))] = blue
+				pixels[(pixel*4)+3+(160*4*(int(ly-1)))] = 0xff
+			}
+		}
 	}
 }
 

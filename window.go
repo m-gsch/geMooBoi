@@ -12,19 +12,30 @@ const (
 	initScreenScale  = 2
 )
 
+var newPixels = make([]byte, 4*initScreenHeight*initScreenWidth)
 var pixels = make([]byte, 4*initScreenHeight*initScreenWidth)
 var xTile = 0
 var yTile = 0
 
-//Color Palette --> 0x00FFFFFF,0x00999999,0x00555555,0x00000000
+// update is called every frame (1/60 [s]).
 func update(screen *ebiten.Image) error {
+
+	// Write your game's logical update.
 	updateState()
+	if ebiten.IsDrawingSkipped() {
+		// When the game is running slowly, the rendering result
+		// will not be adopted.
+		return nil
+	}
+
+	// Write your game's rendering.
 	screen.ReplacePixels(pixels)
+
 	return nil
 }
 
 func showWindow() {
-	ebiten.SetMaxTPS(ebiten.UncappedTPS)
+
 	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, "geMooBoy"); err != nil {
 		log.Fatal(err)
 	}
