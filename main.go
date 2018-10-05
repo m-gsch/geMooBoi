@@ -6,7 +6,7 @@ import (
 
 //Define ROM
 const (
-	ROM     = "drmario.gb"
+	ROM     = "tetris.gb"
 	BOOTROM = "bootrom.bin"
 )
 
@@ -19,6 +19,7 @@ var timerCounter = clockSpeed / frequency
 var dividerCounter int
 var interruptMaster bool
 var scanlineCounter = 456
+var joypadState byte
 
 func main() {
 
@@ -57,6 +58,8 @@ func loadRom() {
 var counter = 0
 
 func updateState() {
+
+	setJoypadState()
 
 	cyclesInUpdate := 0
 	for cyclesInUpdate < 69905 {

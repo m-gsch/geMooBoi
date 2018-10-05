@@ -1,5 +1,9 @@
 package main
 
+import (
+	"github.com/hajimehoshi/ebiten"
+)
+
 /*
 0000-3FFF 16KB ROM Bank 00 (in cartridge, fixed at bank 00)
 4000-7FFF 16KB ROM Bank 01..NN (in cartridge, switchable bank number)
@@ -15,6 +19,7 @@ FF80-FFFE High RAM (HRAM)
 FFFF Interrupt Enable Register
 */
 const (
+	JOYP = 0xFF00
 	DIV  = 0xFF04
 	TIMA = 0xFF05
 	TMA  = 0xFF06
@@ -37,7 +42,12 @@ const (
 
 func readAddress(addr uint16) byte {
 
-	return memory[addr]
+	switch {
+	case addr == JOYP:
+		return getJoypadState()
+	default:
+		return memory[addr]
+	}
 
 }
 
@@ -199,4 +209,48 @@ func dmaTransfer(b byte) {
 	for i := uint16(0); i < 0xA0; i++ {
 		writeAddress(0xFE00+i, readAddress(addr+i))
 	}
+}
+
+func getJoypadState() byte {
+	joyp := memory[JOYP]
+	// flip all the bits
+	joyp = ^joyp
+
+	// are we interested in the standard buttons?
+	if joyp>>4&0x1 == 0x1 {
+		newJoyp := joypadState & 0x0F
+		newJoyp |= 0xF0
+		joyp &= newJoyp
+	} else if joyp>>5&0x1 == 0x1 { //directional buttons
+		newJoyp := joypadState >> 4
+		newJoyp |= 0xF0
+		joyp &= newJoyp
+	}
+	return joyp
+}
+
+func setJoypadState() {
+
+	keys := []ebiten.Key{ebiten.KeyRight,
+		ebiten.KeyLeft,
+		ebiten.KeyUp,
+		ebiten.KeyDown,
+		ebiten.KeyA,
+		ebiten.KeyS,
+		ebiten.KeySpace,
+		ebiten.KeyEnter}
+
+	newJoypadState := byte(0xFF)
+
+	for i, key := range keys {
+		if ebiten.IsKeyPressed(key) {
+			newJoypadState &^= 0x1 << uint(i)
+		}
+	}
+
+	if ^joypadState & ^newJoypadState > 0 {
+		reqInterrupt(4)
+	}
+
+	joypadState = newJoypadState
 }

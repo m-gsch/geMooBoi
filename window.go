@@ -36,7 +36,7 @@ func update(screen *ebiten.Image) error {
 
 func showWindow() {
 
-	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, "geMooBoy"); err != nil {
+	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, "geMooBoi"); err != nil {
 		log.Fatal(err)
 	}
 }
