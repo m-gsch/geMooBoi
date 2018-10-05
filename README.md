@@ -12,11 +12,11 @@ geMooBoi is a GameBoy emulator written in Go.
 $ go get github.com/hajimehoshi/ebiten
 ```
 
-## ⚙️Build
+## ⚙️Building
 
 ```
 $ git clone https://github.com/MartiGJ/geMooBoi.git
-$ cd MartiGJ/geMooBoi
+$ cd geMooBoi
 $ go build
 ```
 
