@@ -30,7 +30,7 @@ $ go build
 
 ## 🖼️Example GIFs
 
-![](images/geMooBoiDrMario.gif) ![](images/geMooBoiTetris.gif)
+![](images/geMooBoiTetris.gif)
 
 ## 🎓License
 
