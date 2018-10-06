@@ -23,10 +23,11 @@ $ go build
 
 ## 📝To Do
 
+- OBJ-to-BG Priority bit for Sprites
 - Sound
 - Proper interrupt timing
 - HALT & STOP instructions
-- ROM banking
+- Proper Memory Bank Controllers
 
 ## 🖼️Example GIFs
 

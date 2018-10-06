@@ -43,6 +43,9 @@ const (
 func readAddress(addr uint16) byte {
 
 	switch {
+	case addr > 0x3FFF && addr < 0x8000: // are we reading from the rom memory bank
+		cartridgeAddr := int(addr) - 0x4000
+		return cartridgeMemory[cartridgeAddr+int(currentROMBank)*0x4000]
 	case addr == JOYP:
 		return getJoypadState()
 	default:
@@ -55,6 +58,7 @@ func writeAddress(addr uint16, b byte) {
 
 	switch {
 	case addr < 0x8000:
+		handleBanking(addr, b)
 	case addr >= 0xFEA0 && addr < 0xFEFF:
 	case addr >= 0xE000 && addr < 0xFE00:
 		memory[addr] = b
@@ -253,4 +257,39 @@ func setJoypadState() {
 	}
 
 	joypadState = newJoypadState
+}
+
+func handleBanking(addr uint16, b byte) {
+	switch {
+	case addr > 0x1FF && addr < 0x4000:
+		changeROMBankLow(b)
+	case addr > 0x3FFF && addr < 0x6000:
+		changeROMBankHigh(b)
+	}
+}
+
+func changeROMBankLow(b byte) {
+	switch memoryBankController {
+	case 1:
+		b &= 0x1F
+		currentROMBank &^= 0x1F
+		currentROMBank |= uint16(b)
+		if currentROMBank == 0 {
+			currentROMBank = 1
+		}
+	case 2:
+		currentROMBank = uint16(b & 0xF)
+		if currentROMBank == 0 {
+			currentROMBank = 1
+		}
+	}
+}
+
+func changeROMBankHigh(b byte) {
+	b &^= 0x1F
+	currentROMBank &= 0x1F
+	currentROMBank |= uint16(b)
+	if currentROMBank == 0 {
+		currentROMBank = 1
+	}
 }

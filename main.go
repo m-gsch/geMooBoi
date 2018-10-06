@@ -6,11 +6,12 @@ import (
 
 //Define ROM
 const (
-	ROM     = "tetris.gb"
+	ROM     = "kirby.gb"
 	BOOTROM = "bootrom.bin"
 )
 
 var memory [0x10000]byte
+var cartridgeMemory []byte
 var instNumber int
 var instructionDEBUG byte
 var cyclesPassed int
@@ -20,6 +21,8 @@ var dividerCounter int
 var interruptMaster bool
 var scanlineCounter = 456
 var joypadState byte
+var memoryBankController int
+var currentROMBank uint16 = 1
 
 func main() {
 
@@ -27,6 +30,7 @@ func main() {
 }
 
 func start() {
+	loadCartridge()
 	loadRom()
 	loadBootRom()
 	showWindow()
@@ -44,7 +48,8 @@ func loadBootRom() {
 	f.Read(memory[:0x100])
 }
 
-func loadRom() {
+func loadCartridge() {
+	var ROMsize [1]byte
 	f, err := os.Open("roms" + string(os.PathSeparator) + ROM)
 
 	if err != nil {
@@ -52,7 +57,42 @@ func loadRom() {
 	}
 
 	defer f.Close()
-	f.Read(memory[:0x8000])
+
+	f.ReadAt(ROMsize[:], 0x148)
+
+	switch ROMsize[0] {
+	case 0:
+		cartridgeMemory = make([]byte, 0x8000)
+	case 1:
+		cartridgeMemory = make([]byte, 0x10000)
+	case 2:
+		cartridgeMemory = make([]byte, 0x20000)
+	case 3:
+		cartridgeMemory = make([]byte, 0x40000)
+	case 4:
+		cartridgeMemory = make([]byte, 0x80000)
+	case 5:
+		cartridgeMemory = make([]byte, 0x100000)
+	case 6:
+		cartridgeMemory = make([]byte, 0x200000)
+	case 7:
+		cartridgeMemory = make([]byte, 0x400000)
+	}
+
+	f.Read(cartridgeMemory)
+
+}
+
+func loadRom() {
+	copy(memory[:0x4000], cartridgeMemory[:0x4000])
+
+	switch memory[0x147] {
+	case 1, 2, 3:
+		memoryBankController = 1
+	case 5, 6:
+		memoryBankController = 2
+
+	}
 }
 
 var counter = 0
@@ -185,6 +225,17 @@ func renderTiles() {
 
 	scrollY := readAddress(SCY)
 	scrollX := readAddress(SCX)
+	windowY := readAddress(WY)
+	windowX := readAddress(WX) - 7
+	ly := readAddress(LY)
+
+	var isWindow bool
+	// is the window enabled?
+	if readAddress(LCDC)>>5&0x1 == 0x1 && windowY <= ly {
+		// is the current scanline we're drawing
+		// within the windows Y pos?
+		isWindow = true
+	}
 
 	if readAddress(LCDC)>>4&0x1 == 0x1 {
 		tileData = 0x8000
@@ -192,20 +243,36 @@ func renderTiles() {
 		tileData = 0x9000
 	}
 
-	if readAddress(LCDC)>>3&0x1 == 0x1 {
-		tileMap = 0x9C00
+	if isWindow {
+		if readAddress(LCDC)>>6&0x1 == 0x1 {
+			tileMap = 0x9C00
+		} else {
+			tileMap = 0x9800
+		}
 	} else {
-		tileMap = 0x9800
+		if readAddress(LCDC)>>3&0x1 == 0x1 {
+			tileMap = 0x9C00
+		} else {
+			tileMap = 0x9800
+		}
 	}
 
-	ly := readAddress(LY)
-	yPos := ly + scrollY
+	var yPos byte
+	if isWindow {
+		yPos = ly - windowY
+	} else {
+		yPos = ly + scrollY
+	}
 
 	tileRow := uint16(yPos/8) * 32
 
 	for i := 0; i < 160; i++ {
-
-		xPos := i + int(scrollX)
+		var xPos int
+		if isWindow && byte(i) >= windowX {
+			xPos = i - int(windowX)
+		} else {
+			xPos = i + int(scrollX)
+		}
 		tileCol := uint16(xPos / 8)
 
 		tileAddr := tileMap + tileRow + tileCol
@@ -233,12 +300,12 @@ func renderTiles() {
 		colorNum <<= 1
 		colorNum |= data1 >> uint(colorBit) & 0x1
 
-		col := getColor(colorNum)
+		color := getColor(colorNum, BGP)
 		var red byte
 		var green byte
 		var blue byte
 
-		switch col {
+		switch color {
 		case 0:
 			red = 0xFF
 			green = 0xFF
@@ -263,20 +330,39 @@ func renderTiles() {
 
 func renderSprites() {
 
+	var using16bit bool
+
+	if readAddress(LCDC)>>2&0x1 == 0x1 {
+		using16bit = true
+	}
+
 	for i := 0; i < 40; i++ {
 		index := uint16(i * 4)
 		yPos := readAddress(0xFE00+index) - 16
 		xPos := readAddress(0xFE00+index+1) - 8
 		tileLocation := readAddress(0xFE00 + index + 2)
-		//attributes := readAddress(0xFE00 + index + 3)
+		attributes := readAddress(0xFE00 + index + 3)
 
 		ly := readAddress(LY)
 
-		ysize := 8
-		// does this sprite intercept with the scanline?
-		if ly >= yPos && ly < yPos+byte(ysize) {
+		var ysize byte
 
-			line := ly - yPos
+		if using16bit {
+			ysize = 16
+		} else {
+			ysize = 8
+		}
+
+		// does this sprite intercept with the scanline?
+		if ly >= yPos && ly < yPos+ysize {
+
+			line := int(ly - yPos)
+
+			// read the sprite in backwards in the y axis
+			if attributes>>6&0x1 == 0x1 {
+				line -= int(ysize - 1)
+				line *= -1
+			}
 
 			line *= 2
 			dataAddress := 0x8000 + uint16(tileLocation)*16 + uint16(line)
@@ -288,19 +374,30 @@ func renderSprites() {
 			for tilePixel := 7; tilePixel >= 0; tilePixel-- {
 				colorBit := tilePixel
 
+				if attributes>>5&0x1 == 0x1 {
+					colorBit -= 7
+					colorBit *= -1
+				}
 				// the rest is the same as for tiles
 				colorNum := data2 >> uint(colorBit) & 0x1
 				colorNum <<= 1
 				colorNum |= data1 >> uint(colorBit) & 0x1
 
-				col := getColor(colorNum)
+				var paletteAddr uint16
+				if attributes>>4&0x1 == 0x1 {
+					paletteAddr = OBP1
+				} else {
+					paletteAddr = OBP0
+				}
+
+				color := getColor(colorNum, paletteAddr)
 				var red byte
 				var green byte
 				var blue byte
 
-				switch col {
+				switch color {
 				case 0: //white is transparent for sprites
-					continue
+					continue //TODO: Look into attribute byte, bit 7 OBJ-to-BG Priority
 				case 1:
 					red = 0xCC
 					green = 0xCC
@@ -324,9 +421,9 @@ func renderSprites() {
 	}
 }
 
-func getColor(colorNum byte) byte {
+func getColor(colorNum byte, addr uint16) byte {
 
-	palette := readAddress(BGP)
+	palette := readAddress(addr)
 
 	var hi uint
 	var lo uint
