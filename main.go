@@ -6,7 +6,7 @@ import (
 
 //Define ROM
 const (
-	ROM     = "kirby.gb"
+	ROM     = "drmario.gb"
 	BOOTROM = "bootrom.bin"
 )
 
@@ -21,20 +21,16 @@ var dividerCounter int
 var interruptMaster bool
 var scanlineCounter = 456
 var joypadState byte
-var memoryBankController int
+
+//MBC - Memory Bank Controller
+var MBC int
 var currentROMBank uint16 = 1
+var gameTitle string
 
 func main() {
-
-	start()
-}
-
-func start() {
 	loadCartridge()
-	loadRom()
 	loadBootRom()
 	showWindow()
-
 }
 
 func loadBootRom() {
@@ -81,18 +77,20 @@ func loadCartridge() {
 
 	f.Read(cartridgeMemory)
 
-}
+	titleBytes := make([]byte, 16)
+	copy(titleBytes, cartridgeMemory[0x134:0x143])
 
-func loadRom() {
-	copy(memory[:0x4000], cartridgeMemory[:0x4000])
+	gameTitle = string(titleBytes)
 
-	switch memory[0x147] {
+	switch cartridgeMemory[0x147] {
 	case 1, 2, 3:
-		memoryBankController = 1
+		MBC = 1
 	case 5, 6:
-		memoryBankController = 2
+		MBC = 2
 
 	}
+
+	copy(memory[:0x4000], cartridgeMemory[:0x4000])
 }
 
 var counter = 0
@@ -136,7 +134,12 @@ func updateState() {
 
 		cyclesPassed = 0 //Testing
 	}
-	//Render screen
+	//Fill screen white if lcd is disabled
+	if !lcdEnabled() {
+		for i := range pixels {
+			pixels[i] = 0xFF
+		}
+	}
 
 }
 
@@ -223,11 +226,13 @@ func renderTiles() {
 	var tileData uint16
 	var tileMap uint16
 
-	scrollY := readAddress(SCY)
-	scrollX := readAddress(SCX)
-	windowY := readAddress(WY)
-	windowX := readAddress(WX) - 7
-	ly := readAddress(LY)
+	scrollY := int(readAddress(SCY))
+	scrollX := int(readAddress(SCX))
+	windowY := int(readAddress(WY))
+	windowX := int(readAddress(WX)) - 7
+	ly := int(readAddress(LY))
+
+	y := ly - 1 //To create pixel array
 
 	var isWindow bool
 	// is the window enabled?
@@ -257,7 +262,7 @@ func renderTiles() {
 		}
 	}
 
-	var yPos byte
+	var yPos int
 	if isWindow {
 		yPos = ly - windowY
 	} else {
@@ -268,10 +273,10 @@ func renderTiles() {
 
 	for i := 0; i < 160; i++ {
 		var xPos int
-		if isWindow && byte(i) >= windowX {
-			xPos = i - int(windowX)
+		if isWindow && i >= windowX {
+			xPos = i - windowX
 		} else {
-			xPos = i + int(scrollX)
+			xPos = i + scrollX
 		}
 		tileCol := uint16(xPos / 8)
 
@@ -320,10 +325,9 @@ func renderTiles() {
 			blue = 0x77
 		}
 
-		pixels[(i*4)+(160*4*(int(ly-1)))] = red
-		pixels[(i*4)+1+(160*4*(int(ly-1)))] = green
-		pixels[(i*4)+2+(160*4*(int(ly-1)))] = blue
-		pixels[(i*4)+3+(160*4*(int(ly-1)))] = 0xff
+		pixels[(i*4)+(160*4*y)] = red
+		pixels[(i*4)+1+(160*4*y)] = green
+		pixels[(i*4)+2+(160*4*y)] = blue
 
 	}
 }
@@ -338,14 +342,15 @@ func renderSprites() {
 
 	for i := 0; i < 40; i++ {
 		index := uint16(i * 4)
-		yPos := readAddress(0xFE00+index) - 16
-		xPos := readAddress(0xFE00+index+1) - 8
+		yPos := int(readAddress(0xFE00+index)) - 16
+		xPos := int(readAddress(0xFE00+index+1)) - 8
 		tileLocation := readAddress(0xFE00 + index + 2)
 		attributes := readAddress(0xFE00 + index + 3)
 
-		ly := readAddress(LY)
+		ly := int(readAddress(LY))
+		y := ly - 1 //To create pixel array
 
-		var ysize byte
+		var ysize int
 
 		if using16bit {
 			ysize = 16
@@ -356,11 +361,11 @@ func renderSprites() {
 		// does this sprite intercept with the scanline?
 		if ly >= yPos && ly < yPos+ysize {
 
-			line := int(ly - yPos)
+			line := ly - yPos
 
 			// read the sprite in backwards in the y axis
 			if attributes>>6&0x1 == 0x1 {
-				line -= int(ysize - 1)
+				line -= ysize - 1
 				line *= -1
 			}
 
@@ -410,12 +415,11 @@ func renderSprites() {
 
 				xPix := 7 - tilePixel
 
-				pixel := int(xPos) + xPix
+				pixel := xPos + xPix
 
-				pixels[(pixel*4)+(160*4*(int(ly-1)))] = red
-				pixels[(pixel*4)+1+(160*4*(int(ly-1)))] = green
-				pixels[(pixel*4)+2+(160*4*(int(ly-1)))] = blue
-				pixels[(pixel*4)+3+(160*4*(int(ly-1)))] = 0xff
+				pixels[(pixel*4)+(160*4*y)] = red
+				pixels[(pixel*4)+1+(160*4*y)] = green
+				pixels[(pixel*4)+2+(160*4*y)] = blue
 			}
 		}
 	}

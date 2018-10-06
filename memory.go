@@ -77,7 +77,7 @@ func writeAddress(addr uint16, b byte) {
 	case addr == DMA:
 		dmaTransfer(b)
 	case addr == 0xFF50 && b == 0x01: //Writing the value of 1 to the address 0xFF50 unmaps the boot ROM
-		loadRom()
+		copy(memory[:0x100], cartridgeMemory[:0x100])
 		memory[addr] = b
 	default:
 		memory[addr] = b
@@ -191,8 +191,7 @@ func setLCDStatus() {
 	} else {
 		scanlineCounter = 456
 		memory[LY] = 0
-		status &^= 0x2
-		status |= 0x1
+		status &^= 0x3
 		writeAddress(STAT, status)
 	}
 
@@ -269,7 +268,7 @@ func handleBanking(addr uint16, b byte) {
 }
 
 func changeROMBankLow(b byte) {
-	switch memoryBankController {
+	switch MBC {
 	case 1:
 		b &= 0x1F
 		currentROMBank &^= 0x1F
