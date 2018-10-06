@@ -174,7 +174,6 @@ func drawScanline() {
 	}
 
 	if control>>1&0x1 == 0x1 {
-		//renderSprites
 		renderSprites()
 	}
 }
