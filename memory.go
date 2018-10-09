@@ -48,6 +48,12 @@ func readAddress(addr uint16) byte {
 		return cartridgeMemory[cartridgeAddr+int(currentROMBank)*0x4000]
 	case addr == JOYP:
 		return getJoypadState()
+	case addr == IF:
+		return memory[IF] | 0xE0 //Only the 5 lower bits of this register are (R/W), the others return '1' always when read
+	case addr == DIV:
+		return byte(dividerCounter >> 8)
+	case addr == STAT:
+		return memory[STAT] | 0x80 // Bit 7 is unused and always return '1'
 	default:
 		return memory[addr]
 	}
@@ -71,9 +77,9 @@ func writeAddress(addr uint16, b byte) {
 			setClockFreq()
 		}
 	case addr == DIV:
-		memory[addr] = 0
+		dividerCounter = 0
 	case addr == LY:
-		memory[addr] = 0
+		memory[LY] = 0
 	case addr == DMA:
 		dmaTransfer(b)
 	case addr == 0xFF50 && b == 0x01: //Writing the value of 1 to the address 0xFF50 unmaps the boot ROM
@@ -113,22 +119,18 @@ func setClockFreq() {
 }
 
 func updateDividerRegister() {
-	dividerCounter += cyclesPassed
-	if dividerCounter >= 255 {
-		dividerCounter = 0
-		memory[DIV]++
-	}
+	dividerCounter += uint16(cyclesPassed)
 }
 
 func reqInterrupt(id uint) {
-	req := readAddress(IF)
+	req := readAddress(IF) & 0x1F
 	req |= 0x1 << id
 	writeAddress(IF, req)
 }
 
 func checkInterrupts() {
 	if interruptMaster {
-		req := readAddress(IF)
+		req := readAddress(IF) & 0x1F
 		enabled := readAddress(IE)
 		if req > 0 {
 			for i := uint(0); i < 5; i++ {
@@ -191,7 +193,7 @@ func setLCDStatus() {
 	} else {
 		scanlineCounter = 456
 		memory[LY] = 0
-		status &^= 0x3
+		status &^= 0x7 //Bits 0-2 return '0' when the LCD is off
 		writeAddress(STAT, status)
 	}
 
@@ -216,20 +218,20 @@ func dmaTransfer(b byte) {
 
 func getJoypadState() byte {
 	joyp := memory[JOYP]
-	// flip all the bits
+
 	joyp = ^joyp
 
-	// are we interested in the standard buttons?
 	if joyp>>4&0x1 == 0x1 {
 		newJoyp := joypadState & 0x0F
-		newJoyp |= 0xF0
-		joyp &= newJoyp
-	} else if joyp>>5&0x1 == 0x1 { //directional buttons
+		joyp &= 0xF0
+		joyp |= newJoyp
+
+	} else if joyp>>5&0x1 == 0x1 {
 		newJoyp := joypadState >> 4
-		newJoyp |= 0xF0
-		joyp &= newJoyp
+		joyp &= 0xF0
+		joyp |= newJoyp
 	}
-	return joyp
+	return ^joyp
 }
 
 func setJoypadState() {
@@ -243,15 +245,15 @@ func setJoypadState() {
 		ebiten.KeySpace,
 		ebiten.KeyEnter}
 
-	newJoypadState := byte(0xFF)
+	var newJoypadState byte
 
 	for i, key := range keys {
 		if ebiten.IsKeyPressed(key) {
-			newJoypadState &^= 0x1 << uint(i)
+			newJoypadState |= 0x1 << uint(i)
 		}
 	}
 
-	if ^joypadState & ^newJoypadState > 0 {
+	if joypadState^newJoypadState > 0 {
 		reqInterrupt(4)
 	}
 

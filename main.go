@@ -2,11 +2,15 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 )
 
-//Define ROM
+//Graphical bug in Kirby when screen wraps around
+//Sprite rendering index out of range BGB test
+
+//Define BOOTROM
 const (
-	ROM     = "drmario.gb"
 	BOOTROM = "bootrom.bin"
 )
 
@@ -17,7 +21,7 @@ var instructionDEBUG byte
 var cyclesPassed int
 var frequency = 4096
 var timerCounter = clockSpeed / frequency
-var dividerCounter int
+var dividerCounter uint16 //Initial value 0xABCC
 var interruptMaster bool
 var scanlineCounter = 456
 var joypadState byte
@@ -28,6 +32,9 @@ var currentROMBank uint16 = 1
 var gameTitle string
 
 func main() {
+	if len(os.Args) < 2 {
+		panic("Execute with arguments.")
+	}
 	loadCartridge()
 	loadBootRom()
 	showWindow()
@@ -46,7 +53,14 @@ func loadBootRom() {
 
 func loadCartridge() {
 	var ROMsize [1]byte
-	f, err := os.Open("roms" + string(os.PathSeparator) + ROM)
+	var err error
+	var f *os.File
+
+	if filepath.IsAbs(os.Args[1]) {
+		f, err = os.Open(os.Args[1])
+	} else {
+		f, err = os.Open("roms" + string(os.PathSeparator) + os.Args[1])
+	}
 
 	if err != nil {
 		panic(err)
@@ -80,7 +94,7 @@ func loadCartridge() {
 	titleBytes := make([]byte, 16)
 	copy(titleBytes, cartridgeMemory[0x134:0x143])
 
-	gameTitle = string(titleBytes)
+	gameTitle = strings.Title(strings.ToLower(string(titleBytes)))
 
 	switch cartridgeMemory[0x147] {
 	case 1, 2, 3:

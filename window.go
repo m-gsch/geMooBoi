@@ -35,7 +35,7 @@ func showWindow() {
 	for i := range pixels {
 		pixels[i] = 0xFF
 	}
-	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, "geMooBoi - "+gameTitle); err != nil {
+	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, gameTitle); err != nil {
 		log.Fatal(err)
 	}
 }
