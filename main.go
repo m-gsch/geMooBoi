@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-//Graphical bug in Kirby when screen wraps around (only background, window seems to be working correctly)
-//Sprite rendering index out of range BGB test
+//Graphics rendering needs work is very ugly
 
 //Define BOOTROM
 const (
@@ -94,7 +93,7 @@ func loadCartridge() {
 	f.Read(cartridgeMemory)
 
 	titleBytes := make([]byte, 16)
-	copy(titleBytes, cartridgeMemory[0x134:0x143])
+	copy(titleBytes, cartridgeMemory[0x134:0x144])
 
 	gameTitle = strings.Title(strings.ToLower(string(titleBytes)))
 
@@ -242,13 +241,12 @@ func renderTiles() {
 	var tileData uint16
 	var tileMap uint16
 
-	scrollY := int(readAddress(SCY))
-	scrollX := int(readAddress(SCX))
-	windowY := int(readAddress(WY))
-	windowX := int(readAddress(WX)) - 7
-	ly := int(readAddress(LY))
-
-	y := ly - 1 //To create pixel array
+	scrollY := readAddress(SCY)
+	scrollX := readAddress(SCX)
+	windowY := readAddress(WY)
+	windowX := readAddress(WX) - 7
+	ly := readAddress(LY) - 1
+	y := int(ly)
 
 	var isWindow bool
 	// is the window enabled?
@@ -278,7 +276,7 @@ func renderTiles() {
 		}
 	}
 
-	var yPos int
+	var yPos byte
 	if isWindow {
 		yPos = ly - windowY
 	} else {
@@ -288,11 +286,11 @@ func renderTiles() {
 	tileRow := uint16(yPos/8) * 32
 
 	for i := 0; i < 160; i++ {
-		var xPos int
-		if isWindow && i >= windowX {
-			xPos = i - windowX
+		var xPos byte
+		if isWindow && i >= int(windowX) {
+			xPos = byte(i) - windowX
 		} else {
-			xPos = i + scrollX
+			xPos = byte(i) + scrollX
 		}
 		tileCol := uint16(xPos / 8)
 
@@ -313,7 +311,7 @@ func renderTiles() {
 		data1 := readAddress(tileLocation + uint16(line))
 		data2 := readAddress(tileLocation + uint16(line) + 1)
 
-		colorBit := xPos % 8
+		colorBit := int(xPos) % 8
 		colorBit -= 7
 		colorBit *= -1
 
@@ -340,7 +338,6 @@ func renderTiles() {
 			green = 0x77
 			blue = 0x77
 		}
-
 		pixels[(i*4)+(160*4*y)] = red
 		pixels[(i*4)+1+(160*4*y)] = green
 		pixels[(i*4)+2+(160*4*y)] = blue
@@ -363,8 +360,8 @@ func renderSprites() {
 		tileLocation := readAddress(0xFE00 + index + 2)
 		attributes := readAddress(0xFE00 + index + 3)
 
-		ly := int(readAddress(LY))
-		y := ly - 1 //To create pixel array
+		ly := readAddress(LY) - 1
+		y := int(ly) //To create pixel array
 
 		var ysize int
 
@@ -375,9 +372,9 @@ func renderSprites() {
 		}
 
 		// does this sprite intercept with the scanline?
-		if ly >= yPos && ly < yPos+ysize {
+		if int(ly) >= yPos && int(ly) < yPos+ysize {
 
-			line := ly - yPos
+			line := int(ly) - yPos
 
 			// read the sprite in backwards in the y axis
 			if attributes>>6&0x1 == 0x1 {
@@ -437,11 +434,18 @@ func renderSprites() {
 
 				xPix := 7 - tilePixel
 
-				pixel := xPos + xPix
-
-				pixels[(pixel*4)+(160*4*y)] = red
-				pixels[(pixel*4)+1+(160*4*y)] = green
-				pixels[(pixel*4)+2+(160*4*y)] = blue
+				x := xPos + xPix
+				if x < 0 {
+					continue
+				}
+				if attributes>>7&0x1 == 0x1 && pixels[(x*4)+(160*4*y)] != 0xff {
+					//Bit priority set sprite behind bg expect if bg color is 0
+					//Needs to know if it's color 0 right now I don't save that
+					continue
+				}
+				pixels[(x*4)+(160*4*y)] = red
+				pixels[(x*4)+1+(160*4*y)] = green
+				pixels[(x*4)+2+(160*4*y)] = blue
 			}
 		}
 	}
