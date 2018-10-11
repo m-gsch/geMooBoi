@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-//Graphical bug in Kirby when screen wraps around
+//Graphical bug in Kirby when screen wraps around (only background, window seems to be working correctly)
 //Sprite rendering index out of range BGB test
 
 //Define BOOTROM
@@ -33,7 +34,8 @@ var gameTitle string
 
 func main() {
 	if len(os.Args) < 2 {
-		panic("Execute with arguments.")
+		fmt.Println("Execute with arguments.")
+		return
 	}
 	loadCartridge()
 	loadBootRom()
@@ -402,6 +404,10 @@ func renderSprites() {
 				colorNum <<= 1
 				colorNum |= data1 >> uint(colorBit) & 0x1
 
+				if colorNum == 0 {
+					continue //color 0 is transparent for sprites
+				}
+
 				var paletteAddr uint16
 				if attributes>>4&0x1 == 0x1 {
 					paletteAddr = OBP1
@@ -415,8 +421,10 @@ func renderSprites() {
 				var blue byte
 
 				switch color {
-				case 0: //white is transparent for sprites
-					continue //TODO: Look into attribute byte, bit 7 OBJ-to-BG Priority
+				case 0:
+					red = 0xFF
+					green = 0xFF
+					blue = 0xFF
 				case 1:
 					red = 0xCC
 					green = 0xCC
