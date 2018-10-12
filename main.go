@@ -2,17 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hajimehoshi/ebiten"
 )
 
 //Graphics rendering needs work is very ugly
-
-//Define BOOTROM
-const (
-	BOOTROM = "bootrom.bin"
-)
 
 var memory [0x10000]byte
 var cartridgeMemory []byte
@@ -21,7 +19,7 @@ var instructionDEBUG byte
 var cyclesPassed int
 var frequency = 4096
 var timerCounter = clockSpeed / frequency
-var dividerCounter uint16 //Initial value 0xABCC
+var dividerCounter uint16
 var interruptMaster bool
 var scanlineCounter = 456
 var joypadState byte
@@ -31,25 +29,53 @@ var MBC int
 var currentROMBank uint16 = 1
 var gameTitle string
 
-func main() {
+func init() {
 	if len(os.Args) < 2 {
 		fmt.Println("Execute with arguments.")
 		return
 	}
+	regs.PC = 0x100
+	regs.A = 0x01
+	setRegF(0x13)
+	regs.B = 0x00
+	regs.C = 0x13
+	regs.D = 0x00
+	regs.E = 0xD8
+	regs.H = 0x01
+	regs.L = 0x4D
+	regs.SP = 0xFFFE
+	memory[0xFF10] = 0x80
+	memory[0xFF11] = 0xBF
+	memory[0xFF12] = 0xF3
+	memory[0xFF14] = 0xBF
+	memory[0xFF16] = 0x3F
+	memory[0xFF19] = 0xBF
+	memory[0xFF1A] = 0x7F
+	memory[0xFF1B] = 0xFF
+	memory[0xFF1C] = 0x9F
+	memory[0xFF1E] = 0xBF
+	memory[0xFF20] = 0xFF
+	memory[0xFF23] = 0xBF
+	memory[0xFF24] = 0x77
+	memory[0xFF25] = 0xF3
+	memory[0xFF26] = 0xF1
+	memory[LCDC] = 0x91
+	memory[BGP] = 0xFC
+	memory[OBP0] = 0xFF
+	memory[OBP1] = 0xFF
+	dividerCounter = 0xABCC
 	loadCartridge()
-	loadBootRom()
-	showWindow()
+
+	//Fill screen with white pixels
+	for i := range pixels {
+		pixels[i] = 0xFF
+	}
 }
 
-func loadBootRom() {
-	f, err := os.Open("roms" + string(os.PathSeparator) + BOOTROM)
-
-	if err != nil {
-		panic(err)
+func main() {
+	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, gameTitle); err != nil {
+		log.Fatal(err)
 	}
-
-	defer f.Close()
-	f.Read(memory[:0x100])
 }
 
 func loadCartridge() {
@@ -69,6 +95,8 @@ func loadCartridge() {
 
 	defer f.Close()
 
+	//ROM Size = 32kB << [0148h]
+	//[0149h]Size of external RAM
 	f.ReadAt(ROMsize[:], 0x148)
 
 	switch ROMsize[0] {
@@ -97,6 +125,7 @@ func loadCartridge() {
 
 	gameTitle = strings.Title(strings.ToLower(string(titleBytes)))
 
+	//[0147h] Cartridge Type
 	switch cartridgeMemory[0x147] {
 	case 1, 2, 3:
 		MBC = 1
@@ -108,8 +137,6 @@ func loadCartridge() {
 	copy(memory[:0x4000], cartridgeMemory[:0x4000])
 }
 
-var counter = 0
-
 func updateState() {
 
 	setJoypadState()
@@ -119,23 +146,9 @@ func updateState() {
 		regs.flag.NZ = !regs.flag.Z //Shitty workaround
 		regs.flag.NC = !regs.flag.C //Shitty workaround
 
+		//printDebugInfo()
 		instructionDEBUG = readAddress(regs.PC)
 
-		/* if regs.PC > 0x0100 {
-			fmt.Printf("Ins: %02X %02X\n", instructionDEBUG, readAddress(regs.PC+1))
-			fmt.Printf("af= %02X%02X\n", regs.A, getRegF())
-			fmt.Printf("bc= %02X%02X\n", regs.B, regs.C)
-			fmt.Printf("de= %02X%02X\n", regs.D, regs.E)
-			fmt.Printf("hl= %02X%02X\n", regs.H, regs.L)
-			fmt.Printf("sp= %04X\n", regs.SP)
-			fmt.Printf("pc= %04X\n", regs.PC)
-			fmt.Printf("lcdc= %02X\n", readAddress(LCDC))
-			fmt.Printf("stat= %02X\n", readAddress(STAT))
-			fmt.Printf("ly= %02X\n", readAddress(LY))
-			fmt.Printf("ie= %02X\n", readAddress(IE))
-			fmt.Printf("if= %02X\n", readAddress(IF))
-			fmt.Scanln()
-		} */
 		regs.PC++
 
 		decodeIns(instructionDEBUG)
@@ -244,7 +257,13 @@ func renderTiles() {
 	scrollY := readAddress(SCY)
 	scrollX := readAddress(SCX)
 	windowY := readAddress(WY)
-	windowX := readAddress(WX) - 7
+	windowX := readAddress(WX)
+
+	if windowX < 7 { //If WX is set <7 it's treated as if it was 7
+		windowX = 7
+	}
+
+	windowX -= 7
 	ly := readAddress(LY) - 1
 	y := int(ly)
 

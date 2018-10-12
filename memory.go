@@ -82,9 +82,6 @@ func writeAddress(addr uint16, b byte) {
 		memory[LY] = 0
 	case addr == DMA:
 		dmaTransfer(b)
-	case addr == 0xFF50 && b == 0x01: //Writing the value of 1 to the address 0xFF50 unmaps the boot ROM
-		copy(memory[:0x100], cartridgeMemory[:0x100])
-		memory[addr] = b
 	default:
 		memory[addr] = b
 	}

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"github.com/hajimehoshi/ebiten"
 )
 
@@ -29,13 +27,4 @@ func update(screen *ebiten.Image) error {
 	screen.ReplacePixels(pixels)
 
 	return nil
-}
-
-func showWindow() {
-	for i := range pixels {
-		pixels[i] = 0xFF
-	}
-	if err := ebiten.Run(update, initScreenWidth, initScreenHeight, initScreenScale, gameTitle); err != nil {
-		log.Fatal(err)
-	}
 }
