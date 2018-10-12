@@ -77,7 +77,7 @@ func writeAddress(addr uint16, b byte) {
 	switch {
 	case addr < 0x2000:
 		switch mbc.cType {
-		case 2, 3:
+		case 0x2, 0x3:
 			if b&0xF == 0xA {
 				mbc.RAMenable = true
 			} else {
@@ -87,7 +87,7 @@ func writeAddress(addr uint16, b byte) {
 		}
 	case addr >= 0x2000 && addr < 0x4000:
 		switch mbc.cType {
-		case 1, 2, 3:
+		case 0x1, 0x2, 0x3: //MBC1
 			b &= 0x1F
 
 			if b == 0 {
@@ -96,7 +96,15 @@ func writeAddress(addr uint16, b byte) {
 
 			mbc.ROMbank &= 0x60
 			mbc.ROMbank |= b
-		case 0x0F, 0x10, 0x11, 0x12, 0x13:
+		case 0x5, 0x6: //MBC2
+			b &= 0xF
+
+			if b == 0 {
+				b++
+			}
+
+			mbc.ROMbank = b
+		case 0x0F, 0x10, 0x11, 0x12, 0x13: //MBC3
 			b &= 0x7F
 
 			if b == 0 {
@@ -107,7 +115,7 @@ func writeAddress(addr uint16, b byte) {
 		}
 	case addr >= 0x4000 && addr < 0x6000:
 		switch mbc.cType {
-		case 1, 2, 3:
+		case 0x1, 0x2, 0x3:
 			b &= 0x3
 			if mbc.mode == 0x1 {
 				mbc.RAMbank = b
@@ -118,7 +126,7 @@ func writeAddress(addr uint16, b byte) {
 		}
 	case addr >= 0x6000 && addr < 0x8000:
 		switch mbc.cType {
-		case 2, 3:
+		case 0x2, 0x3:
 			mbc.mode = b & 0x1
 		}
 	case addr >= 0xFEA0 && addr < 0xFEFF:

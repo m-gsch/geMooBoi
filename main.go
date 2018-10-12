@@ -10,7 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
-//Graphics rendering needs work is very ugly
+//Graphics rendering needs work, it is very ugly
 //Use type interface for registers (?)
 
 var memory [0x10000]byte
