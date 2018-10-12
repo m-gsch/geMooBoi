@@ -11,6 +11,7 @@ import (
 )
 
 //Graphics rendering needs work is very ugly
+//Use type interface for registers (?)
 
 var memory [0x10000]byte
 var cartridgeMemory []byte
@@ -24,9 +25,6 @@ var interruptMaster bool
 var scanlineCounter = 456
 var joypadState byte
 
-//MBC - Memory Bank Controller
-var MBC int
-var currentROMBank uint16 = 1
 var gameTitle string
 
 func init() {
@@ -63,6 +61,7 @@ func init() {
 	memory[BGP] = 0xFC
 	memory[OBP0] = 0xFF
 	memory[OBP1] = 0xFF
+	memory[BOOT] = 0xFF //BOOT_OFF
 	dividerCounter = 0xABCC
 	loadCartridge()
 
@@ -79,7 +78,7 @@ func main() {
 }
 
 func loadCartridge() {
-	var ROMsize [1]byte
+	var mbcHeader [3]byte
 	var err error
 	var f *os.File
 
@@ -95,28 +94,16 @@ func loadCartridge() {
 
 	defer f.Close()
 
-	//ROM Size = 32kB << [0148h]
-	//[0149h]Size of external RAM
-	f.ReadAt(ROMsize[:], 0x148)
+	//[0x147] Cartridge type
+	//ROM Size = 32kB << [0x148]
+	//[0x149]Size of external RAM
+	f.ReadAt(mbcHeader[:], 0x147)
 
-	switch ROMsize[0] {
-	case 0:
-		cartridgeMemory = make([]byte, 0x8000)
-	case 1:
-		cartridgeMemory = make([]byte, 0x10000)
-	case 2:
-		cartridgeMemory = make([]byte, 0x20000)
-	case 3:
-		cartridgeMemory = make([]byte, 0x40000)
-	case 4:
-		cartridgeMemory = make([]byte, 0x80000)
-	case 5:
-		cartridgeMemory = make([]byte, 0x100000)
-	case 6:
-		cartridgeMemory = make([]byte, 0x200000)
-	case 7:
-		cartridgeMemory = make([]byte, 0x400000)
-	}
+	mbc = memoryBankController{cType: mbcHeader[0], ROMbank: 1, RAMbank: 0, RAMenable: false, mode: 1}
+
+	cartridgeMemory = make([]byte, 0x8000<<mbcHeader[1])
+	fmt.Printf("Cartridge type: %0X\n", mbcHeader[0])
+	fmt.Printf("Size: %d\n", 0x8000<<mbcHeader[1])
 
 	f.Read(cartridgeMemory)
 
@@ -124,15 +111,6 @@ func loadCartridge() {
 	copy(titleBytes, cartridgeMemory[0x134:0x144])
 
 	gameTitle = strings.Title(strings.ToLower(string(titleBytes)))
-
-	//[0147h] Cartridge Type
-	switch cartridgeMemory[0x147] {
-	case 1, 2, 3:
-		MBC = 1
-	case 5, 6:
-		MBC = 2
-
-	}
 
 	copy(memory[:0x4000], cartridgeMemory[:0x4000])
 }
@@ -146,9 +124,7 @@ func updateState() {
 		regs.flag.NZ = !regs.flag.Z //Shitty workaround
 		regs.flag.NC = !regs.flag.C //Shitty workaround
 
-		//printDebugInfo()
 		instructionDEBUG = readAddress(regs.PC)
-
 		regs.PC++
 
 		decodeIns(instructionDEBUG)

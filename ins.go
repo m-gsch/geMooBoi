@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 )
 
 //TODO: STOP, HALT
@@ -41,6 +42,7 @@ func decodeIns(opcode byte) {
 		ei()
 	case 0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD: // Invalid
 		fmt.Printf("Wrong instruction: %X  PC: %X\n", opcode, regs.PC)
+		os.Exit(0)
 	case 0x01, 0x11, 0x21, 0x31:
 		ldR16d16(tableR[2*p], tableR[2*p+1])
 	case 0x02, 0x12:

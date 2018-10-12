@@ -37,15 +37,25 @@ const (
 	BGP  = 0xFF47
 	OBP0 = 0xFF48
 	OBP1 = 0xFF49
+	BOOT = 0xFF50
 	IE   = 0xFFFF
 )
+
+type memoryBankController struct {
+	cType     byte
+	ROMbank   byte
+	RAMbank   byte
+	RAMenable bool
+	mode      byte
+}
+
+var mbc memoryBankController
 
 func readAddress(addr uint16) byte {
 
 	switch {
-	case addr > 0x3FFF && addr < 0x8000: // are we reading from the rom memory bank
-		cartridgeAddr := int(addr) - 0x4000
-		return cartridgeMemory[cartridgeAddr+int(currentROMBank)*0x4000]
+	case addr >= 0x4000 && addr < 0x8000: // are we reading from the rom memory bank
+		return cartridgeMemory[uint(addr)+uint(mbc.ROMbank-1)*0x4000]
 	case addr == JOYP:
 		return getJoypadState()
 	case addr == IF:
@@ -60,11 +70,57 @@ func readAddress(addr uint16) byte {
 
 }
 
+//When RAM access is disabled, all writes to the external RAM area 0xA000-0xBFFF are ignored, and reads
+//return 0xFF. Pan Docs recommends disabling RAM when it’s not being accessed to protect the contents
 func writeAddress(addr uint16, b byte) {
 
 	switch {
-	case addr < 0x8000:
-		handleBanking(addr, b)
+	case addr < 0x2000:
+		switch mbc.cType {
+		case 2, 3:
+			if b&0xF == 0xA {
+				mbc.RAMenable = true
+			} else {
+				mbc.RAMenable = false
+			}
+
+		}
+	case addr >= 0x2000 && addr < 0x4000:
+		switch mbc.cType {
+		case 1, 2, 3:
+			b &= 0x1F
+
+			if b == 0 {
+				b++
+			}
+
+			mbc.ROMbank &= 0x60
+			mbc.ROMbank |= b
+		case 0x0F, 0x10, 0x11, 0x12, 0x13:
+			b &= 0x7F
+
+			if b == 0 {
+				b++
+			}
+
+			mbc.ROMbank = b
+		}
+	case addr >= 0x4000 && addr < 0x6000:
+		switch mbc.cType {
+		case 1, 2, 3:
+			b &= 0x3
+			if mbc.mode == 0x1 {
+				mbc.RAMbank = b
+			} else {
+				mbc.ROMbank &= 0x1F
+				mbc.ROMbank |= b << 5
+			}
+		}
+	case addr >= 0x6000 && addr < 0x8000:
+		switch mbc.cType {
+		case 2, 3:
+			mbc.mode = b & 0x1
+		}
 	case addr >= 0xFEA0 && addr < 0xFEFF:
 	case addr >= 0xE000 && addr < 0xFE00:
 		memory[addr] = b
@@ -82,6 +138,7 @@ func writeAddress(addr uint16, b byte) {
 		memory[LY] = 0
 	case addr == DMA:
 		dmaTransfer(b)
+	case addr == BOOT: //After BOOT is done writes are ignored
 	default:
 		memory[addr] = b
 	}
@@ -255,39 +312,4 @@ func setJoypadState() {
 	}
 
 	joypadState = newJoypadState
-}
-
-func handleBanking(addr uint16, b byte) {
-	switch {
-	case addr > 0x1FF && addr < 0x4000:
-		changeROMBankLow(b)
-	case addr > 0x3FFF && addr < 0x6000:
-		changeROMBankHigh(b)
-	}
-}
-
-func changeROMBankLow(b byte) {
-	switch MBC {
-	case 1:
-		b &= 0x1F
-		currentROMBank &^= 0x1F
-		currentROMBank |= uint16(b)
-		if currentROMBank == 0 {
-			currentROMBank = 1
-		}
-	case 2:
-		currentROMBank = uint16(b & 0xF)
-		if currentROMBank == 0 {
-			currentROMBank = 1
-		}
-	}
-}
-
-func changeROMBankHigh(b byte) {
-	b &^= 0x1F
-	currentROMBank &= 0x1F
-	currentROMBank |= uint16(b)
-	if currentROMBank == 0 {
-		currentROMBank = 1
-	}
 }
