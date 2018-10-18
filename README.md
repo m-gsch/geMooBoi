@@ -35,4 +35,4 @@ $ go build
 
 ## 🎓License
 
-[MIT](geMooBoi/LICENSE.md)
+[MIT](LICENSE.md)
